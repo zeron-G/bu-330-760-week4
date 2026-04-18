@@ -1,18 +1,51 @@
 """Math agent that solves questions using tools in a ReAct loop."""
 
 import json
+import os
+from functools import lru_cache
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIModel
+
 from calculator import calculate
+from codex_oauth import CodexOAuthManager, build_codex_model
 
 load_dotenv()
 
-# Configure your model below. Examples:
-#   "google-gla:gemini-2.5-flash"       (needs GOOGLE_API_KEY)
-#   "openai:gpt-4o-mini"                (needs OPENAI_API_KEY)
-#   "anthropic:claude-sonnet-4-6"    (needs ANTHROPIC_API_KEY)
-MODEL = "google-gla:gemini-2.5-flash"
+ROOT = Path(__file__).resolve().parent
+PRODUCTS_PATH = ROOT / "products.json"
+
+
+def build_model():
+    """Choose the best available model backend from the local environment."""
+    provider = os.getenv("MODEL_PROVIDER", "auto").strip().lower()
+    codex_model = os.getenv("CODEX_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
+    openai_model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip() or "gpt-4.1-mini"
+    google_model = os.getenv("GOOGLE_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+
+    if provider in {"auto", "codex"} and CodexOAuthManager.is_available():
+        return build_codex_model(codex_model)
+    if provider == "codex":
+        raise RuntimeError("MODEL_PROVIDER=codex, but ~/.codex/auth.json is unavailable or incomplete.")
+
+    if provider in {"auto", "openai"} and os.getenv("OPENAI_API_KEY", "").strip():
+        return OpenAIModel(openai_model)
+    if provider == "openai":
+        raise RuntimeError("MODEL_PROVIDER=openai, but OPENAI_API_KEY is missing.")
+
+    if provider in {"auto", "google"} and os.getenv("GOOGLE_API_KEY", "").strip():
+        return f"google-gla:{google_model}"
+    if provider == "google":
+        raise RuntimeError("MODEL_PROVIDER=google, but GOOGLE_API_KEY is missing.")
+
+    raise RuntimeError(
+        "No usable model backend found. Configure Codex OAuth, OPENAI_API_KEY, or GOOGLE_API_KEY."
+    )
+
+
+MODEL = build_model()
 
 agent = Agent(
     MODEL,
@@ -34,25 +67,39 @@ def calculator_tool(expression: str) -> str:
     return calculate(expression)
 
 
-# TODO: Implement this tool by uncommenting the code below and replacing
-# the ... with your implementation. The tool should:
-#   1. Read products.json using json.load() (json is already imported above)
-#   2. If the product_name is in the catalog, return its price as a string
-#   3. If not found, return the list of available product names so the agent
-#      can try again with the correct name
-#
-# @agent.tool_plain
-# def product_lookup(product_name: str) -> str:
-#     """Look up the price of a product by name.
-#     Use this when a question asks about product prices from the catalog.
-#     """
-#     ...
+@lru_cache(maxsize=1)
+def load_catalog() -> dict[str, float]:
+    with PRODUCTS_PATH.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+@agent.tool_plain
+def product_lookup(product_name: str) -> str:
+    """Look up the price of a product by name.
+
+    Use this when a question asks about product prices from the catalog.
+    """
+    catalog = load_catalog()
+    normalized = product_name.strip().casefold().rstrip(".?!")
+    aliases = {normalized}
+    if normalized.endswith("s"):
+        aliases.add(normalized[:-1])
+    else:
+        aliases.add(f"{normalized}s")
+
+    for name, price in catalog.items():
+        canonical = name.casefold()
+        if canonical in aliases or canonical.rstrip("s") in aliases:
+            return f"{price:.2f}"
+
+    available = ", ".join(sorted(catalog))
+    return f"Product not found. Available products: {available}"
 
 
 def load_questions(path: str = "math_questions.md") -> list[str]:
     """Load numbered questions from the markdown file."""
     questions = []
-    with open(path) as f:
+    with (ROOT / path).open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line and line[0].isdigit() and ". " in line[:4]:

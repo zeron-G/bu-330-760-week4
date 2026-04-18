@@ -6,13 +6,16 @@ A ReAct agent that solves questions using tool calls.
 
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't have it.
 
-2. Copy `.env.example` to `.env` and add your API key:
+2. Copy `.env.example` to `.env` and choose a backend:
    ```bash
    cp .env.example .env
    ```
-   Then edit `.env` and replace `your-key-here` with your key from [Google AI Studio](https://aistudio.google.com/apikey).
+   The app now supports three modes:
+   - `MODEL_PROVIDER=auto`: prefer Codex OAuth from `~/.codex/auth.json`, then OpenAI API, then Google AI Studio
+   - `MODEL_PROVIDER=codex`: force the migrated Codex OAuth backend
+   - `MODEL_PROVIDER=openai` or `google`: force a specific API provider
 
-   To use a different provider, change the `MODEL` variable in `agent.py` and set the matching key in `.env`.
+   Codex OAuth uses the migrated ChatGPT/Codex flow and does not require copying a key into this repo.
 
 3. Make sure `.env` is in your `.gitignore` so you don't commit your key.
 
@@ -25,6 +28,16 @@ uv run agent.py
 uv will install dependencies automatically on first run.
 
 The agent will work through each question in `math_questions.md` and print the ReAct trace (Reason / Act / Result) for each one.
+
+## What Changed
+
+- Implemented `product_lookup` so the agent can price items from `products.json`
+- Added automatic backend selection with a migrated Codex OAuth option
+- Kept OpenAI API key fallback support for direct API usage
+
+## Video
+
+Video link: pending. Add your recording link here before final submission if needed.
 
 ## Files
 

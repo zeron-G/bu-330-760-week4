@@ -3,6 +3,8 @@ name = "week4-math-agent"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "httpx",
+    "openai",
     "pydantic-ai",
     "python-dotenv",
 ]
