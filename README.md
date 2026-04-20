@@ -37,7 +37,7 @@ The agent will work through each question in `math_questions.md` and print the R
 
 ## Video
 
-Video link: pending. Add your recording link here before final submission if needed.
+Video link: https://youtu.be/a7ep2wgSHXg
 
 ## Files
 
